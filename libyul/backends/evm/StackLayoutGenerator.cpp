@@ -273,9 +273,11 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 				// We can skip the visit, if we have seen this precise exit layout already last time.
 				// Note: if the entire graph is revisited in the backwards jump check below, doing
 				//       this seems to break things; not sure why.
-				if (auto* previousInfo = util::valueOrNullptr(m_layout.blockInfos, block))
-					if (previousInfo->exitLayout == *exitLayout)
-						continue;
+				// Note: since I don't quite understand why doing this can break things, I comment
+				//       it out for now, since not aborting in those cases should always be safe.
+				// if (auto* previousInfo = util::valueOrNullptr(m_layout.blockInfos, block))
+				//	if (previousInfo->exitLayout == *exitLayout)
+				//		continue;
 				auto& info = m_layout.blockInfos[block];
 				info.exitLayout = *exitLayout;
 				info.entryLayout = propagateStackThroughBlock(info.exitLayout, *block);
@@ -295,7 +297,7 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 			{
 				// This block jumps backwards, but does not provide all slots required by the jump target on exit.
 				// Therefore we need to visit the subgraph between ``target`` and ``block`` again.
-				// In particular we can visit backwards starting from ``block`` and marking all entries to be visited
+				// In particular we can visit backwards starting from ``block`` and mark all entries to-be-visited-
 				// again until we hit ``target``.
 				toVisit.emplace_front(block);
 				util::BreadthFirstSearch<DFG::BasicBlock const*>{{block}}.run(
@@ -310,7 +312,7 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 				// TODO: while the above is enough, the layout of ``target`` might change in the process.
 				// While the shuffled layout for ``target`` will be compatible, it can be worthwhile propagating
 				// it further up once more.
-				// This would mean doing visited.clear() here instead of the BreadthFirstSearch, revisiting the entire graph.
+				// This would mean not stopping at _block == target above or even doing visited.clear() here, revisiting the entire graph.
 				// This is a tradeoff between the runtime of this process and the optimality of the result.
 				// Also note that while visiting the entire graph again *can* be helpful, it can also be detrimental.
 				// Also note that for some reason using visited.clear() is incompatible with skipping the revisit
