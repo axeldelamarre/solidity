@@ -298,13 +298,15 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 				// In particular we can visit backwards starting from ``block`` and marking all entries to be visited
 				// again until we hit ``target``.
 				toVisit.emplace_front(block);
-				util::BreadthFirstSearch<DFG::BasicBlock const*>{{block}}.run([&](DFG::BasicBlock const* _block, auto _addChild) {
-					visited.erase(_block);
-					if (_block == target)
-						return;
-					for (auto const* entry: _block->entries)
-						_addChild(entry);
-				});
+				util::BreadthFirstSearch<DFG::BasicBlock const*>{{block}}.run(
+					[&visited, target = target](DFG::BasicBlock const* _block, auto _addChild) {
+						visited.erase(_block);
+						if (_block == target)
+							return;
+						for (auto const* entry: _block->entries)
+							_addChild(entry);
+					}
+				);
 				// TODO: while the above is enough, the layout of ``target`` might change in the process.
 				// While the shuffled layout for ``target`` will be compatible, it can be worthwhile propagating
 				// it further up once more.
