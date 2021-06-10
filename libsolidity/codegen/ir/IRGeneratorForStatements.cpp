@@ -311,11 +311,13 @@ string IRGeneratorForStatements::constantValueFunction(VariableDeclaration const
 		string functionName = IRNames::constantValueFunction(_constant);
 		return m_context.functionCollector().createFunction(functionName, [&] {
 			Whiskers templ(R"(
+				/// @src <sourceIndex>:<sourceLocationStart>,<sourceLocationEnd>
 				function <functionName>() -> <ret> {
 					<code>
 					<ret> := <value>
 				}
 			)");
+			frontend::addSourceInformation(templ, _constant, m_context);
 			templ("functionName", functionName);
 			IRGeneratorForStatements generator(m_context, m_utils);
 			solAssert(_constant.value(), "");
@@ -568,9 +570,10 @@ bool IRGeneratorForStatements::visit(IfStatement const& _ifStatement)
 	return false;
 }
 
-void IRGeneratorForStatements::endVisit(PlaceholderStatement const&)
+void IRGeneratorForStatements::endVisit(PlaceholderStatement const& _placeholder)
 {
 	solAssert(m_placeholderCallback, "");
+	setLocation(_placeholder);
 	emitCode() << m_placeholderCallback();
 }
 
@@ -2380,8 +2383,7 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 			emitCode() << "mstore(add(" << m_utils.allocateUnboundedFunction() << "() , " << to_string(returnInfo.estimatedReturnSize) << "), 0)\n";
 	}
 
-	Whiskers templ(R"(
-		if iszero(extcodesize(<address>)) { <revertNoCode>() }
+	Whiskers templ(R"(if iszero(extcodesize(<address>)) { <revertNoCode>() }
 
 		// storage for arguments and returned data
 		let <pos> := <allocateUnbounded>()

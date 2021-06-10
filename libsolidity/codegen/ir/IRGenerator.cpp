@@ -21,8 +21,8 @@
  * Component that translates Solidity code into Yul.
  */
 
+#include <libsolidity/codegen/ir/Common.h>
 #include <libsolidity/codegen/ir/IRGenerator.h>
-
 #include <libsolidity/codegen/ir/IRGeneratorForStatements.h>
 
 #include <libsolidity/ast/AST.h>
@@ -130,6 +130,7 @@ string IRGenerator::generate(
 	};
 
 	Whiskers t(R"(
+		/// @src <sourceIndex>:<sourceLocationStart>,<sourceLocationEnd>
 		object "<CreationObject>" {
 			code {
 				<memoryInitCreation>
@@ -160,6 +161,8 @@ string IRGenerator::generate(
 	resetContext(_contract);
 	for (VariableDeclaration const* var: ContractType(_contract).immutableVariables())
 		m_context.registerImmutableVariable(*var);
+
+	addSourceInformation(t, _contract, m_context);
 
 	t("CreationObject", IRNames::creationObject(_contract));
 	t("library", _contract.isLibrary());
@@ -312,11 +315,15 @@ string IRGenerator::generateFunction(FunctionDefinition const& _function)
 	return m_context.functionCollector().createFunction(functionName, [&]() {
 		m_context.resetLocalVariables();
 		Whiskers t(R"(
+			/// @src <sourceIndex>:<sourceLocationStart>,<sourceLocationEnd>
 			function <functionName>(<params>)<?+retParams> -> <retParams></+retParams> {
 				<retInit>
 				<body>
 			}
 		)");
+
+		addSourceInformation(t, _function, m_context);
+
 		t("functionName", functionName);
 		vector<string> params;
 		for (auto const& varDecl: _function.parameters())
@@ -370,6 +377,7 @@ string IRGenerator::generateModifier(
 	return m_context.functionCollector().createFunction(functionName, [&]() {
 		m_context.resetLocalVariables();
 		Whiskers t(R"(
+			/// @src <sourceIndex>:<sourceLocationStart>,<sourceLocationEnd>
 			function <functionName>(<params>)<?+retParams> -> <retParams></+retParams> {
 				<assignRetParams>
 				<evalArgs>
@@ -398,6 +406,7 @@ string IRGenerator::generateModifier(
 			_modifierInvocation.name().annotation().referencedDeclaration
 		);
 		solAssert(modifier, "");
+		addSourceInformation(t, *modifier, m_context);
 		switch (*_modifierInvocation.name().annotation().requiredLookup)
 		{
 		case VirtualLookup::Virtual:
@@ -448,11 +457,13 @@ string IRGenerator::generateFunctionWithModifierInner(FunctionDefinition const& 
 	return m_context.functionCollector().createFunction(functionName, [&]() {
 		m_context.resetLocalVariables();
 		Whiskers t(R"(
+			/// @src <sourceIndex>:<sourceLocationStart>,<sourceLocationEnd>
 			function <functionName>(<params>)<?+retParams> -> <retParams></+retParams> {
 				<assignRetParams>
 				<body>
 			}
 		)");
+		addSourceInformation(t, _function, m_context);
 		t("functionName", functionName);
 		vector<string> retParams;
 		vector<string> retParamsIn;
@@ -489,27 +500,33 @@ string IRGenerator::generateGetter(VariableDeclaration const& _varDecl)
 		{
 			solAssert(paramTypes.empty(), "");
 			solUnimplementedAssert(type->sizeOnStack() == 1, "");
-			return Whiskers(R"(
-				function <functionName>() -> rval {
-					rval := loadimmutable("<id>")
-				}
-			)")
-			("functionName", functionName)
-			("id", to_string(_varDecl.id()))
-			.render();
+			return addSourceInformation(
+				Whiskers(R"(
+					/// @src <sourceIndex>:<sourceLocationStart>,<sourceLocationEnd>
+					function <functionName>() -> rval {
+						rval := loadimmutable("<id>")
+					}
+				)")
+				("functionName", functionName)
+				("id", to_string(_varDecl.id())),
+				_varDecl, m_context)
+				.render();
 		}
 		else if (_varDecl.isConstant())
 		{
 			solAssert(paramTypes.empty(), "");
-			return Whiskers(R"(
-				function <functionName>() -> <ret> {
-					<ret> := <constantValueFunction>()
-				}
-			)")
-			("functionName", functionName)
-			("constantValueFunction", IRGeneratorForStatements(m_context, m_utils).constantValueFunction(_varDecl))
-			("ret", suffixedVariableNameList("ret_", 0, _varDecl.type()->sizeOnStack()))
-			.render();
+			return addSourceInformation(
+				Whiskers(R"(
+					/// @src <sourceIndex>:<sourceLocationStart>,<sourceLocationEnd>
+					function <functionName>() -> <ret> {
+						<ret> := <constantValueFunction>()
+					}
+				)")
+				("functionName", functionName)
+				("constantValueFunction", IRGeneratorForStatements(m_context, m_utils).constantValueFunction(_varDecl))
+				("ret", suffixedVariableNameList("ret_", 0, _varDecl.type()->sizeOnStack())),
+				_varDecl, m_context)
+				.render();
 		}
 
 		string code;
@@ -616,16 +633,19 @@ string IRGenerator::generateGetter(VariableDeclaration const& _varDecl)
 			.render();
 		}
 
-		return Whiskers(R"(
-			function <functionName>(<params>) -> <retVariables> {
-				<code>
-			}
-		)")
-		("functionName", functionName)
-		("params", joinHumanReadable(parameters))
-		("retVariables", joinHumanReadable(returnVariables))
-		("code", std::move(code))
-		.render();
+		return addSourceInformation(
+			Whiskers(R"(
+				/// @src <sourceIndex>:<sourceLocationStart>,<sourceLocationEnd>
+				function <functionName>(<params>) -> <retVariables> {
+					<code>
+				}
+			)")
+			("functionName", functionName)
+			("params", joinHumanReadable(parameters))
+			("retVariables", joinHumanReadable(returnVariables))
+			("code", std::move(code)),
+			_varDecl, m_context)
+			.render();
 	});
 }
 
