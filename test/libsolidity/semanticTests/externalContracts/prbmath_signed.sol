@@ -50,9 +50,9 @@ contract test {
 // compileViaYul: also
 // ----
 // constructor()
-// gas irOptimized: 2120722
+// gas irOptimized: 2121094
 // gas legacy: 2602700
-// gas legacyOptimized: 1900162
+// gas legacyOptimized: 1874490
 // div(int256,int256): 3141592653589793238, 88714123 -> 35412542528203691288251815328
 // gas irOptimized: 22085
 // gas legacy: 22767
@@ -70,11 +70,11 @@ contract test {
 // gas legacy: 23228
 // gas legacyOptimized: 22683
 // log10(int256): 3141592653589793238 -> 4971498726941338506
-// gas irOptimized: 31093
+// gas irOptimized: 31099
 // gas legacy: 32934
 // gas legacyOptimized: 30323
 // log2(int256): 3141592653589793238 -> 1651496129472318782
-// gas irOptimized: 29266
+// gas irOptimized: 29272
 // gas legacy: 31067
 // gas legacyOptimized: 28426
 // mul(int256,int256): 3141592653589793238, 88714123 -> 278703637

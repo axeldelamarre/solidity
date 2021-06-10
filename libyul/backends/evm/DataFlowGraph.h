@@ -39,12 +39,14 @@ struct FunctionCallReturnLabelSlot
 	std::reference_wrapper<yul::FunctionCall const> call;
 	bool operator==(FunctionCallReturnLabelSlot const& _rhs) const { return &call.get() == &_rhs.call.get(); }
 	bool operator<(FunctionCallReturnLabelSlot const& _rhs) const { return &call.get() < &_rhs.call.get(); }
+	static constexpr bool canBeFreelyGenerated = true;
 };
 /// The return label of a function while generating the code of the function body.
 struct FunctionReturnLabelSlot
 {
 	bool operator==(FunctionReturnLabelSlot const&) const { return true; }
 	bool operator<(FunctionReturnLabelSlot const&) const { return false; }
+	static constexpr bool canBeFreelyGenerated = false;
 };
 /// A slot containing the current value of a particular variable.
 struct VariableSlot
@@ -53,6 +55,7 @@ struct VariableSlot
 	std::shared_ptr<DebugData const> debugData{};
 	bool operator==(VariableSlot const& _rhs) const { return &variable.get() == &_rhs.variable.get(); }
 	bool operator<(VariableSlot const& _rhs) const { return &variable.get() < &_rhs.variable.get(); }
+	static constexpr bool canBeFreelyGenerated = false;
 };
 /// A slot containing a literal value.
 struct LiteralSlot
@@ -61,6 +64,7 @@ struct LiteralSlot
 	std::shared_ptr<DebugData const> debugData{};
 	bool operator==(LiteralSlot const& _rhs) const { return value == _rhs.value; }
 	bool operator<(LiteralSlot const& _rhs) const { return value < _rhs.value; }
+	static constexpr bool canBeFreelyGenerated = true;
 };
 /// A slot containing the idx-th return value of a previous call.
 struct TemporarySlot
@@ -72,6 +76,7 @@ struct TemporarySlot
 	size_t index = 0;
 	bool operator==(TemporarySlot const& _rhs) const { return &call.get() == &_rhs.call.get() && index == _rhs.index; }
 	bool operator<(TemporarySlot const& _rhs) const { return std::make_pair(&call.get(), index) < std::make_pair(&_rhs.call.get(), _rhs.index); }
+	static constexpr bool canBeFreelyGenerated = false;
 };
 /// A slot containing an arbitrary value that is always eventually popped and never used.
 /// Used to maintain stack balance on control flow joins.
@@ -79,10 +84,17 @@ struct JunkSlot
 {
 	bool operator==(JunkSlot const&) const { return true; }
 	bool operator<(JunkSlot const&) const { return false; }
+	static constexpr bool canBeFreelyGenerated = true;
 };
 using StackSlot = std::variant<FunctionCallReturnLabelSlot, FunctionReturnLabelSlot, VariableSlot, LiteralSlot, TemporarySlot, JunkSlot>;
 /// The stack top is usually the last element of the vector.
 using Stack = std::vector<StackSlot>;
+
+/// @returns true if @a _slot can be generated on the stack at any time.
+inline bool canBeFreelyGenerated(StackSlot const& _slot)
+{
+	return std::visit([](auto const& _typedSlot) { return std::decay_t<decltype(_typedSlot)>::canBeFreelyGenerated; }, _slot);
+}
 
 /// Data flow graph consisting of ``DFG::BasicBlock``s connected by control flow.
 struct DFG

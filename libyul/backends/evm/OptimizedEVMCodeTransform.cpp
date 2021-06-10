@@ -440,6 +440,8 @@ void OptimizedEVMCodeTransform::createStackLayout(Stack _targetStack)
 				// - any other opcode with cost 2
 				// - unless the stack is empty: DUP1
 				// - the constant 0
+				// Note: it might even make sense to introduce a specific assembly item for this, s.t.
+				//       the peephole optimizer can deal with this (e.g. POP PUSHJUNK can be removed).
 				m_assembly.appendInstruction(evmasm::Instruction::PC);
 			}
 		}, _slot);

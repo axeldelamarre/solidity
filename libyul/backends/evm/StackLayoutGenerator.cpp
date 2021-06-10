@@ -196,103 +196,125 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 {
 	std::list<DFG::BasicBlock const*> toVisit{_entry};
 	std::set<DFG::BasicBlock const*> visited;
-	std::list<std::pair<DFG::BasicBlock const*, DFG::BasicBlock const*>> backwardsJumps;
 
 	while (!toVisit.empty())
 	{
-		DFG::BasicBlock const *block = *toVisit.begin();
-		toVisit.pop_front();
-
-		if (visited.count(block))
-			continue;
-
-		if (std::optional<Stack> exitLayout = std::visit(util::GenericVisitor{
-			[&](DFG::BasicBlock::MainExit const&) -> std::optional<Stack>
-			{
-				visited.emplace(block);
-				return Stack{};
-			},
-			[&](DFG::BasicBlock::Jump const& _jump) -> std::optional<Stack>
-			{
-				if (_jump.backwards)
-				{
-					visited.emplace(block);
-					backwardsJumps.emplace_back(block, _jump.target);
-					if (auto* info = util::valueOrNullptr(m_layout.blockInfos, _jump.target))
-						return info->entryLayout;
-					return Stack{};
-				}
-				if (visited.count(_jump.target))
-				{
-					visited.emplace(block);
-					return m_layout.blockInfos.at(_jump.target).entryLayout;
-				}
-				toVisit.emplace_front(_jump.target);
-				return nullopt;
-			},
-			[&](DFG::BasicBlock::ConditionalJump const& _conditionalJump) -> std::optional<Stack>
-			{
-				bool zeroVisited = visited.count(_conditionalJump.zero);
-				bool nonZeroVisited = visited.count(_conditionalJump.nonZero);
-				if (zeroVisited && nonZeroVisited)
-				{
-					Stack stack = combineStack(
-						m_layout.blockInfos.at(_conditionalJump.zero).entryLayout,
-						m_layout.blockInfos.at(_conditionalJump.nonZero).entryLayout
-					);
-					stack.emplace_back(_conditionalJump.condition);
-					visited.emplace(block);
-					return stack;
-				}
-				if (!zeroVisited)
-					toVisit.emplace_front(_conditionalJump.zero);
-				if (!nonZeroVisited)
-					toVisit.emplace_front(_conditionalJump.nonZero);
-				return nullopt;
-			},
-			[&](DFG::BasicBlock::FunctionReturn const& _functionReturn) -> std::optional<Stack>
-			{
-				visited.emplace(block);
-				yulAssert(_functionReturn.info, "");
-				Stack stack = _functionReturn.info->returnVariables | ranges::views::transform([](auto const& _varSlot){
-					return StackSlot{_varSlot};
-				}) | ranges::to<Stack>;
-				stack.emplace_back(FunctionReturnLabelSlot{});
-				return stack;
-			},
-			[&](DFG::BasicBlock::Terminated const&) -> std::optional<Stack>
-			{
-				visited.emplace(block);
-				return Stack{};
-			},
-		}, block->exit))
+		// TODO: calculate this only once.
+		std::list<std::pair<DFG::BasicBlock const*, DFG::BasicBlock const*>> backwardsJumps;
+		while (!toVisit.empty())
 		{
-			// TODO: why does this not work?
-			/*if (auto* previousInfo = util::valueOrNullptr(m_context.blockInfos, block))
-				if (previousInfo->exitLayout == *exitLayout)
-					continue;*/
-			auto& info = m_layout.blockInfos[block];
-			info.exitLayout = *exitLayout;
-			info.entryLayout = propagateStackThroughBlock(info.exitLayout, *block);
+			DFG::BasicBlock const *block = *toVisit.begin();
+			toVisit.pop_front();
 
-			for (auto entry: block->entries)
-				toVisit.emplace_back(entry);
-		}
-	}
+			if (visited.count(block))
+				continue;
 
-	for (auto [block, target]: backwardsJumps)
-		if (ranges::any_of(
-			m_layout.blockInfos[target].entryLayout,
-			[exitLayout = m_layout.blockInfos[block].exitLayout](StackSlot const& _slot) {
-				return !util::findOffset(exitLayout, _slot);
+			if (std::optional<Stack> exitLayout = std::visit(util::GenericVisitor{
+				[&](DFG::BasicBlock::MainExit const&) -> std::optional<Stack>
+				{
+					visited.emplace(block);
+					return Stack{};
+				},
+				[&](DFG::BasicBlock::Jump const& _jump) -> std::optional<Stack>
+				{
+					if (_jump.backwards)
+					{
+						visited.emplace(block);
+						backwardsJumps.emplace_back(block, _jump.target);
+						if (auto* info = util::valueOrNullptr(m_layout.blockInfos, _jump.target))
+							return info->entryLayout;
+						return Stack{};
+					}
+					if (visited.count(_jump.target))
+					{
+						visited.emplace(block);
+						return m_layout.blockInfos.at(_jump.target).entryLayout;
+					}
+					toVisit.emplace_front(_jump.target);
+					return nullopt;
+				},
+				[&](DFG::BasicBlock::ConditionalJump const& _conditionalJump) -> std::optional<Stack>
+				{
+					bool zeroVisited = visited.count(_conditionalJump.zero);
+					bool nonZeroVisited = visited.count(_conditionalJump.nonZero);
+					if (zeroVisited && nonZeroVisited)
+					{
+						Stack stack = combineStack(
+							m_layout.blockInfos.at(_conditionalJump.zero).entryLayout,
+							m_layout.blockInfos.at(_conditionalJump.nonZero).entryLayout
+						);
+						stack.emplace_back(_conditionalJump.condition);
+						visited.emplace(block);
+						return stack;
+					}
+					if (!zeroVisited)
+						toVisit.emplace_front(_conditionalJump.zero);
+					if (!nonZeroVisited)
+						toVisit.emplace_front(_conditionalJump.nonZero);
+					return nullopt;
+				},
+				[&](DFG::BasicBlock::FunctionReturn const& _functionReturn) -> std::optional<Stack>
+				{
+					visited.emplace(block);
+					yulAssert(_functionReturn.info, "");
+					Stack stack = _functionReturn.info->returnVariables | ranges::views::transform([](auto const& _varSlot){
+						return StackSlot{_varSlot};
+					}) | ranges::to<Stack>;
+					stack.emplace_back(FunctionReturnLabelSlot{});
+					return stack;
+				},
+				[&](DFG::BasicBlock::Terminated const&) -> std::optional<Stack>
+				{
+					visited.emplace(block);
+					return Stack{};
+				},
+			}, block->exit))
+			{
+				// We can skip the visit, if we have seen this precise exit layout already last time.
+				// Note: if the entire graph is revisited in the backwards jump check below, doing
+				//       this seems to break things; not sure why.
+				if (auto* previousInfo = util::valueOrNullptr(m_layout.blockInfos, block))
+					if (previousInfo->exitLayout == *exitLayout)
+						continue;
+				auto& info = m_layout.blockInfos[block];
+				info.exitLayout = *exitLayout;
+				info.entryLayout = propagateStackThroughBlock(info.exitLayout, *block);
+
+				for (auto entry: block->entries)
+					toVisit.emplace_back(entry);
 			}
-		))
-			// This block jumps backwards, but does not provide all slots required by the jump target on exit.
-			// Visit the subgraph starting at the block once more; the block will now start with the
-			// required entry layout.
-			// TODO: While this will eventually stabilize and terminate, this will currently traverse the graph more
-			// often than required. Trying to cleverly clear ``visited`` might be more efficient.
-			processEntryPoint(block);
+		}
+
+		for (auto [block, target]: backwardsJumps)
+			if (ranges::any_of(
+				m_layout.blockInfos[target].entryLayout,
+				[exitLayout = m_layout.blockInfos[block].exitLayout](StackSlot const& _slot) {
+					return !util::findOffset(exitLayout, _slot);
+				}
+			))
+			{
+				// This block jumps backwards, but does not provide all slots required by the jump target on exit.
+				// Therefore we need to visit the subgraph between ``target`` and ``block`` again.
+				// In particular we can visit backwards starting from ``block`` and marking all entries to be visited
+				// again until we hit ``target``.
+				toVisit.emplace_front(block);
+				util::BreadthFirstSearch<DFG::BasicBlock const*>{{block}}.run([&](DFG::BasicBlock const* _block, auto _addChild) {
+					visited.erase(_block);
+					if (_block == target)
+						return;
+					for (auto const* entry: _block->entries)
+						_addChild(entry);
+				});
+				// TODO: while the above is enough, the layout of ``target`` might change in the process.
+				// While the shuffled layout for ``target`` will be compatible, it can be worthwhile propagating
+				// it further up once more.
+				// This would mean doing visited.clear() here instead of the BreadthFirstSearch, revisiting the entire graph.
+				// This is a tradeoff between the runtime of this process and the optimality of the result.
+				// Also note that while visiting the entire graph again *can* be helpful, it can also be detrimental.
+				// Also note that for some reason using visited.clear() is incompatible with skipping the revisit
+				// of already seen exit layouts above, I'm not sure yet why.
+			}
+	}
 }
 
 Stack StackLayoutGenerator::combineStack(Stack const& _stack1, Stack const& _stack2)
@@ -401,24 +423,27 @@ void StackLayoutGenerator::stitchConditionalJumps(DFG::BasicBlock& _block)
 			{
 				auto& zeroTargetInfo = m_layout.blockInfos.at(_conditionalJump.zero);
 				auto& nonZeroTargetInfo = m_layout.blockInfos.at(_conditionalJump.nonZero);
-				// TODO: Assert correctness, resp. achievability of layout.
 				Stack exitLayout = info.exitLayout;
+
+				// The last block must have produced the condition at the stack top.
 				yulAssert(!exitLayout.empty(), "");
+				yulAssert(exitLayout.back() == _conditionalJump.condition, "");
+				// The condition is consumed by the jump.
 				exitLayout.pop_back();
-				{
-					Stack newZeroEntryLayout = exitLayout;
-					for (auto& slot: newZeroEntryLayout)
-						if (!util::findOffset(zeroTargetInfo.entryLayout, slot))
+
+				auto fixJumpTargetEntry = [&](Stack const& _originalEntryLayout) -> Stack {
+					Stack newEntryLayout = exitLayout;
+					// Whatever the block being jumped to does not actually require, can be marked as junk.
+					for (auto& slot: newEntryLayout)
+						if (!util::findOffset(_originalEntryLayout, slot))
 							slot = JunkSlot{};
-					zeroTargetInfo.entryLayout = newZeroEntryLayout;
-				}
-				{
-					Stack newNonZeroEntryLayout = exitLayout;
-					for (auto& slot: newNonZeroEntryLayout)
-						if (!util::findOffset(nonZeroTargetInfo.entryLayout, slot))
-							slot = JunkSlot{};
-					nonZeroTargetInfo.entryLayout = newNonZeroEntryLayout;
-				}
+					// Make sure everything the block being jumped to requires is actually present or can be generated.
+					for (auto const& slot: _originalEntryLayout)
+						yulAssert(canBeFreelyGenerated(slot) || util::findOffset(newEntryLayout, slot), "");
+					return newEntryLayout;
+				};
+				zeroTargetInfo.entryLayout = fixJumpTargetEntry(zeroTargetInfo.entryLayout);
+				nonZeroTargetInfo.entryLayout = fixJumpTargetEntry(nonZeroTargetInfo.entryLayout);
 				_addChild(_conditionalJump.zero);
 				_addChild(_conditionalJump.nonZero);
 			},

@@ -32,10 +32,15 @@ struct StackLayout
 {
 	struct BlockInfo
 	{
+		/// Complete stack layout that is required for entering a block.
 		Stack entryLayout;
+		/// The resulting stack layout after executing the block.
 		Stack exitLayout;
 	};
 	std::map<DFG::BasicBlock const*, BlockInfo> blockInfos;
+	/// For each operation the complete stack layout that:
+	/// - has the slots required for the operation at the stack top.
+	/// - will have the operation result in a layout that makes it easy to achieve the next desired layout.
 	std::map<DFG::Operation const*, Stack> operationEntryLayout;
 };
 
