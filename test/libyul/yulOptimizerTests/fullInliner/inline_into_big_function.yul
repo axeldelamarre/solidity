@@ -4,15 +4,20 @@
         b := sload(x)
     }
     // This will stop inlining at some point because
-    // the global context gets too big.
-    let x := f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(2)))))))))))))))))))
+    // the function gets too big.
+    function g() -> x {
+        x := f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(2)))))))))))))))))))
+    }
 }
 // ====
-// EVMVersion: =homestead
+// EVMVersion: >homestead
 // ----
 // step: fullInliner
 //
 // {
+//     function f(a) -> b
+//     { b := sload(mload(a)) }
+//     function g() -> x_1
 //     {
 //         let a_20 := 2
 //         let b_21 := 0
@@ -53,8 +58,24 @@
 //         let a_56 := b_54
 //         let b_57 := 0
 //         b_57 := sload(mload(a_56))
-//         let x_1 := f(f(f(f(f(f(b_57))))))
+//         let a_59 := b_57
+//         let b_60 := 0
+//         b_60 := sload(mload(a_59))
+//         let a_62 := b_60
+//         let b_63 := 0
+//         b_63 := sload(mload(a_62))
+//         let a_65 := b_63
+//         let b_66 := 0
+//         b_66 := sload(mload(a_65))
+//         let a_68 := b_66
+//         let b_69 := 0
+//         b_69 := sload(mload(a_68))
+//         let a_71 := b_69
+//         let b_72 := 0
+//         b_72 := sload(mload(a_71))
+//         let a_74 := b_72
+//         let b_75 := 0
+//         b_75 := sload(mload(a_74))
+//         x_1 := b_75
 //     }
-//     function f(a) -> b
-//     { b := sload(mload(a)) }
 // }
